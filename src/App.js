@@ -21,6 +21,7 @@ const App = () => {
     const hash = window.location.hash.substring(1);
     const params = new URLSearchParams(hash);
     const token = params.get("token");
+    
     if (token) {
       setTokenToPOST(token);
       setTokenInURL(token); // Guarda el token en el estado

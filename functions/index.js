@@ -1,5 +1,13 @@
 
 const functions = require("firebase-functions");
+const nacl = require('tweetnacl');
+const { Client } = require('discord.js');
+const { InteractionType, InteractionResponseType } = require('discord-interactions');
+const cors = require('cors')({ origin: true });
+
+
+// Inicializa Firebase Admin para interactuar con servicios de Firebase como Firestore
+admin.initializeApp();
 
  exports.helloWorld = functions.https.onRequest((request, response) => {
 
@@ -109,3 +117,68 @@ exports.discordLinkAccounts = functions.https.onRequest(async (req, res) => {
      }
    });
 });
+
+
+// Define la función que busca información de un usuario en Trello utilizando su email y un token, y luego almacena la cuenta de Trello en Firestore si el usuario existe. 
+exports.linkTrelloAccount = functions.https.onRequest((req, res) => {
+   // Imprime un mensaje de log para seguimiento
+   console.log("linkTrelloAccount final version with data logs and data[0] changed to data");
+ 
+   // Maneja las solicitudes CORS para permitir o restringir el acceso a la función
+   cors(req, res, async () => {
+     // Obtiene los parámetros 'email' y 'token' de la solicitud
+     const email = req.query.email;
+     const token = req.query.token;
+ 
+     // Imprime los parámetros para seguimiento
+     console.log("Query params from getUserInfoFromTrello:", email, token);
+ 
+     // Verifica si el email y el token están presentes
+     if (!email || !token) {
+       // Si faltan, envía una respuesta de error
+       res.status(400).json({ message: 'Email and API Token are required' });
+       return;
+     }
+ 
+     // Construye la URL para la API de Trello
+     const apiUrl = `https://api.trello.com/1/search/members?query=${email}&key=${trelloUserinfoApiKey}&token=${token}`;
+ 
+     try {
+       // Realiza una solicitud HTTP a la API de Trello y espera la respuesta
+       const response = await fetch(apiUrl);
+       const data = await response.json();
+ 
+       // Imprime los datos recibidos para seguimiento
+       console.log("data", data);
+ 
+       // Verifica si el usuario tiene una cuenta de Trello normal
+       if (data && data[0].memberType === "normal") {
+         // Almacena la información del usuario de Trello en Firestore
+         const docRef = admin.firestore().collection('estudiantesMappings').doc(email);
+         await docRef.set({
+           trelloUsername: data[0].username,
+           trelloUserId: data[0].id
+         }, { merge: true });
+ 
+         // Envía una respuesta exitosa con los datos de Trello
+         res.status(200).send(data);
+ 
+       } else if (data && data[0].memberType === "ghost") {
+         // Maneja el caso en que el usuario no tiene una cuenta de Trello
+         console.log("User doesn't have a Trello account");
+         console.log("data not Trello user", data);
+ 
+         // Envía una respuesta con los datos indicando que no tiene cuenta de Trello
+         res.status(200).send(data);
+ 
+       } else {
+         // En caso de que el usuario no se encuentre, envía una respuesta de error
+         res.status(404).json({ message: 'User not found' });
+       }
+     } catch (error) {
+       // Maneja cualquier error en la solicitud HTTP
+       console.error('Error fetching data from Trello:', error);
+       res.status(500).json({ message: 'Internal Server Error' });
+     }
+   });
+ });
