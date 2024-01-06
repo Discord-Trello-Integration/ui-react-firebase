@@ -4,7 +4,7 @@ const nacl = require('tweetnacl');
 const { Client } = require('discord.js');
 const { InteractionType, InteractionResponseType } = require('discord-interactions');
 const cors = require('cors')({ origin: true });
-
+const admin = require('firebase-admin');
 
 // Inicializa Firebase Admin para interactuar con servicios de Firebase como Firestore
 admin.initializeApp();
@@ -123,6 +123,9 @@ exports.discordLinkAccounts = functions.https.onRequest(async (req, res) => {
 exports.linkTrelloAccount = functions.https.onRequest((req, res) => {
    // Imprime un mensaje de log para seguimiento
    console.log("linkTrelloAccount final version with data logs and data[0] changed to data");
+
+   // Obtener la clave de la API de Trello desde la configuración de Firebase Functions.
+   const API_KEY = functions.config().trello.api_key;
  
    // Maneja las solicitudes CORS para permitir o restringir el acceso a la función
    cors(req, res, async () => {
@@ -141,7 +144,7 @@ exports.linkTrelloAccount = functions.https.onRequest((req, res) => {
      }
  
      // Construye la URL para la API de Trello
-     const apiUrl = `https://api.trello.com/1/search/members?query=${email}&key=${trelloUserinfoApiKey}&token=${token}`;
+     const apiUrl = `https://api.trello.com/1/search/members?query=${email}&key=${API_KEY}&token=${token}`;
  
      try {
        // Realiza una solicitud HTTP a la API de Trello y espera la respuesta
@@ -182,3 +185,58 @@ exports.linkTrelloAccount = functions.https.onRequest((req, res) => {
      }
    });
  });
+
+
+ // Esta es una función asincrónica que envía mensajes a Discord.
+async function sendDiscordNotification(message) {
+
+  // URL del webhook de Discord
+  const WEBHOOK_URL= functions.config().discord.webhook_url;
+
+  // Realiza una petición HTTP POST a Discord
+  await fetch(WEBHOOK_URL, {
+    method: 'POST', // Tipo de petición: POST
+    headers: {
+      'Content-Type': 'application/json' // Especifica que el contenido es JSON
+    },
+    body: JSON.stringify({ content: message }) // Convierte el mensaje a JSON y lo envía
+  });
+  console.log("Message sent to Discord"); // Registra en consola que el mensaje fue enviado
+}
+
+
+// Esta función maneja las peticiones HTTP a tu Cloud Function
+exports.trelloWebhookToDiscordHandler = functions.https.onRequest(async (request, response) => {
+  console.log("trelloWebhookToDiscordHandler called with request corrected");
+
+  try {
+    // Revisa si el método de la petición es HEAD y responde con 'OK'
+    if (request.method === 'HEAD') {
+      response.status(200).send('OK');
+      return;
+    }
+    
+    const { body } = request; // Obtiene el cuerpo de la petición
+
+    // Verifica si el cuerpo de la petición tiene la estructura esperada
+    if (!body || !body.action || !body.action.data || !body.action.data.text) {
+      console.log("Invalid request, action or text missing");
+      response.status(400).send('Bad Request');
+      return;
+    }
+
+    const commentText = body.action.data.text; // Extrae el texto del comentario de Trello
+
+    // Si el texto del comentario incluye '@', envía una notificación a Discord
+    if (commentText.includes('@')) {
+      await sendDiscordNotification(`Un nuevo comentario de Trello incluye una mención: ${commentText}`);
+    }
+
+    // Responde a la petición con 'OK'
+    response.status(200).send('OK');
+
+  } catch (error) {
+    console.error("An error occurred:", error);
+    response.status(500).send('Internal Server Error'); // Maneja errores no esperados
+  }
+});
