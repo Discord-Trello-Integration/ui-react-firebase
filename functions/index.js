@@ -186,7 +186,6 @@ exports.linkTrelloAccount = functions.https.onRequest((req, res) => {
    });
  });
 
-
  // Esta es una función asincrónica que envía mensajes a Discord.
 async function sendDiscordNotification(message) {
 
@@ -207,6 +206,7 @@ async function sendDiscordNotification(message) {
 
 // Esta función maneja las peticiones HTTP a tu Cloud Function
 exports.trelloWebhookToDiscordHandler = functions.https.onRequest(async (request, response) => {
+
   console.log("trelloWebhookToDiscordHandler called with request corrected");
 
   try {
@@ -229,7 +229,9 @@ exports.trelloWebhookToDiscordHandler = functions.https.onRequest(async (request
 
     // Si el texto del comentario incluye '@', envía una notificación a Discord
     if (commentText.includes('@')) {
+
       await sendDiscordNotification(`Un nuevo comentario de Trello incluye una mención: ${commentText}`);
+      
     }
 
     // Responde a la petición con 'OK'
